@@ -1,0 +1,62 @@
+name: iOS Development Archive
+
+on:
+  push:
+    branches:
+      - Dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-development-archive-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    name: Archive Pipeline
+    runs-on:
+      - self-hosted
+      - macOS
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Show build environment
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcode-select -p
+
+      - name: Create unsigned XCArchive
+        id: archive
+        shell: bash
+        env:
+          ARCHIVE_OUTPUT_DIR: ${{ vars.IOS_ARCHIVE_OUTPUT_DIR }}
+          XCODE_DEVELOPER_DIR: ${{ vars.XCODE_DEVELOPER_DIR }}
+          CODE_SIGNING_ALLOWED: "NO"
+        run: bash scripts/ci/archive.sh
+
+      - name: Add archive details to summary
+        shell: bash
+        run: |
+          {
+            echo "## iOS archive created"
+            echo
+            echo "- Branch: \`${GITHUB_REF_NAME}\`"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Local path: \`${{ steps.archive.outputs.archive_path }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload archive to workflow run
+        uses: actions/upload-artifact@v7
+        with:
+          name: Pipeline-${{ github.run_number }}-${{ github.sha }}
+          path: ${{ steps.archive.outputs.archive_path }}
+          if-no-files-found: error
+          retention-days: 14
